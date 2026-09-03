@@ -41,7 +41,6 @@ O escopo do app mobile acompanha o que já está implementado no projeto web ori
 - Axios (consumo de API)
 - JSON Server (backend simulado para os módulos de CRUD)
 
-> Ajuste esta lista conforme as dependências reais do `package.json` da pasta `my-app`, incluindo bibliotecas de navegação, ícones ou gerenciamento de estado que você tiver adicionado.
 
 ## ⚙️ Instruções para execução
 
