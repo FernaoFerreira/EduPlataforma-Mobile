@@ -29,7 +29,7 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 ## Tecnologias utilizadas
 
 **Aplicativo mobile:**
-- React Native 0.74 e Expo SDK 51
+- React Native 0.74 e Expo SDK 57
 - React Navigation 6 — `bottom-tabs` (abas) e `native-stack` (pilhas)
 - React Context API para estado da aplicação
 - JavaScript (sem bibliotecas de UI de terceiros: todos os componentes são próprios)
