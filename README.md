@@ -1,82 +1,91 @@
 # EduPlataforma Mobile
 
-> Porte mobile da **[Plataforma de Cursos Online](https://github.com/FernaoFerreira/Plataforma-de-Cursos-Online)** — desenvolvido como trabalho da disciplina de **Tecnologia de Construção de Software**.
+Porte mobile da **[Plataforma de Cursos Online](https://github.com/FernaoFerreira/Plataforma-de-Cursos-Online)**, desenvolvido para a disciplina de **Tecnologia de Construção de Software**.
 
-## 📖 Sobre o projeto
+## Sobre o projeto
 
-A **Plataforma de Cursos Online** (EduPlataforma) é um painel administrativo web para gestão de cursos EAD, construído como uma SPA em **React + Vite**, com React Router para navegação, Axios para consumo de API e JSON Server como backend simulado para os módulos de CRUD. Ele reúne em um único lugar o cadastro de cursos, categorias, módulos/aulas, usuários, matrículas e o controle financeiro da operação.
+A Plataforma de Cursos Online é um painel administrativo web para gestão de cursos EAD, construído como uma SPA em React + Vite, com React Router, Axios e JSON Server como backend simulado. Ele reúne o cadastro de cursos, categorias, módulos e aulas, usuários, matrículas e o controle financeiro da operação.
 
-Este repositório contém o **EduPlataforma Mobile**, uma versão nativa para smartphones do mesmo domínio de problema, construída com **React Native/Expo**. O objetivo acadêmico é aplicar, em um app mobile, os mesmos conceitos de arquitetura, organização de telas e fluxo de dados do projeto web original, avaliando as diferenças de construção de software entre uma aplicação web tradicional e uma aplicação mobile nativa.
+Este repositório traz o **EduPlataforma Mobile**: o mesmo domínio reconstruído como aplicativo nativo em React Native/Expo. O objetivo acadêmico é comparar, na prática, a construção de uma aplicação web e a de uma aplicação mobile — o modelo de dados e as regras de negócio se aproveitam quase integralmente, mas a camada de interface e o paradigma de navegação são reescritos do zero.
 
-## 🎯 Problema que resolve
+## Problema que resolve
 
-Instituições de ensino e produtores de curso que administram uma plataforma EAD normalmente dependem de acessar um painel web pelo computador para tarefas simples do dia a dia — checar quantas matrículas entraram, consultar um aluno, ver o resumo financeiro. O **EduPlataforma Mobile** resolve a falta de um canal rápido e portátil para esse acompanhamento, permitindo consultar e gerenciar as informações essenciais da plataforma (cursos, alunos, matrículas, indicadores) diretamente do celular, sem depender de estar em frente a um computador.
+Quem administra uma plataforma EAD depende de um painel web no computador para tarefas curtas do dia a dia: conferir quantas matrículas entraram, consultar um aluno, ver o resumo financeiro, liberar um certificado. O EduPlataforma Mobile cobre essa lacuna ao levar as operações essenciais para o celular, com uma interface pensada para toque e uso com uma mão.
 
-## ✅ Funcionalidades previstas
+## Funcionalidades
 
-O escopo do app mobile acompanha o que já está implementado no projeto web original, adaptado à navegação mobile:
+| Módulo | Situação no app |
+|---|---|
+| Painel com métricas de cursos, pessoas, matrículas e receita | implementado |
+| CRUD de categorias, com bloqueio de exclusão quando há cursos vinculados | implementado |
+| CRUD de cursos, com seleção de categoria e professor e controle de publicação | implementado |
+| CRUD de pessoas (administrador, professor, aluno) | implementado |
+| Módulos e aulas em hierarquia por curso | implementado |
+| Matrículas, marcação de conclusão e emissão de certificado | implementado |
+| Planos, assinaturas e registro de pagamentos | implementado |
+| Busca e filtros nas listagens | implementado |
+| Persistência e integração com o backend | pendente (ver limitações) |
 
-- **Dashboard** — métricas de cursos, usuários, matrículas e categorias.
-- **Categorias** — CRUD completo.
-- **Cursos** — CRUD completo, com seleção de categoria e professor.
-- **Usuários** — CRUD completo.
-- **Módulos e Aulas** — gestão em hierarquia por curso (curso → módulos → aulas).
-- **Matrículas** — matrícula de alunos, marcação de conclusão e emissão de certificados.
-- **Financeiro** — gestão de planos, assinaturas e pagamentos simples.
-- Navegação nativa por abas/stack adaptada ao formato de tela pequena (em substituição às rotas do site).
+## Tecnologias utilizadas
 
-> ⚠️ Este é o escopo funcional de referência (já validado no projeto web). O estado real de implementação de cada módulo **no app mobile** está descrito na seção de limitações abaixo.
+**Aplicativo mobile:**
+- React Native 0.74 e Expo SDK 51
+- React Navigation 6 — `bottom-tabs` (abas) e `native-stack` (pilhas)
+- React Context API para estado da aplicação
+- JavaScript (sem bibliotecas de UI de terceiros: todos os componentes são próprios)
 
-## 🛠️ Tecnologias utilizadas
+**Projeto web de origem, como referência:**
+- React + Vite, React Router, Axios, JSON Server
 
-**App mobile (este repositório):**
-- [React Native](https://reactnative.dev/)
-- [Expo](https://expo.dev/) (`expo start`, `expo-status-bar`)
-- JavaScript/TypeScript
-- React Navigation *(para as rotas entre telas, caso adotado)*
+## Estrutura do projeto
 
-**Referência — projeto web original:**
-- React + Vite (SPA)
-- React Router (navegação entre telas)
-- Axios (consumo de API)
-- JSON Server (backend simulado para os módulos de CRUD)
+```
+my-app/
+├── App.js                      Ponto de entrada; monta os provedores e a navegação
+└── src/
+    ├── theme/index.js          Tokens de cor, espaço, tipografia e alvo de toque
+    ├── data/seed.js            Dados iniciais em memória
+    ├── context/
+    │   ├── DadosContext.js     Estado e operações CRUD
+    │   └── FeedbackContext.js  Avisos de confirmação e erro
+    ├── components/             13 componentes reutilizáveis
+    ├── navigation/index.js     Abas + pilhas
+    └── screens/                13 telas
+docs/
+├── etapa-02.md                 Protótipo de interface
+└── etapa-03.md                 Navegação, UX e acessibilidade
+```
 
+A separação segue uma regra simples: `components/` não conhece as regras do domínio e recebe tudo por props; `screens/` compõe componentes e conversa com os contextos; `context/` concentra dados e feedback; `theme/` centraliza os tokens — nenhuma cor ou medida é escrita direto nas telas.
 
-## ⚙️ Instruções para execução
+## Execução
 
-Pré-requisitos: [Node.js](https://nodejs.org/) instalado e o app **Expo Go** no celular (Android/iOS), ou um emulador Android/iOS configurado.
+Pré-requisitos: Node.js 18 ou superior e o app **Expo Go** no celular, ou um emulador Android/iOS configurado.
 
 ```bash
-# 1. Clonar o repositório
 git clone https://github.com/FernaoFerreira/EduPlataforma-Mobile.git
 cd EduPlataforma-Mobile/my-app
-
-# 2. Instalar as dependências
 npm install
-
-# 3. Iniciar o projeto
 npx expo start
 ```
 
-Após o comando `npx expo start`, um QR code será exibido no terminal:
-- **No celular:** escaneie o QR code com o app **Expo Go**.
-- **No emulador:** pressione `a` (Android) ou `i` (iOS) no terminal com o Expo CLI em execução.
+Com o servidor no ar, escaneie o QR code com o Expo Go, ou pressione `a` (Android) / `i` (iOS) no terminal.
 
-## 🚧 Limitações conhecidas
+## Limitações conhecidas
 
-- Projeto em estágio inicial/acadêmico: o app mobile ainda não implementa todos os módulos listados acima — a cobertura completa (Dashboard, CRUDs, hierarquia de módulos/aulas, matrículas com certificados, financeiro) é a do projeto web de referência, servindo como meta de escopo para o port.
-- Ainda não há integração direta com o backend (JSON Server) usado pelo projeto web; a persistência de dados no app depende do que já foi conectado até o momento.
-- Sem autenticação/controle de permissões implementado.
-- Sem persistência local (os dados não são salvos entre sessões do app).
-- Cobertura de testes automatizados ainda não implementada.
-- Compatibilidade testada primariamente via Expo Go; build nativo (APK/IPA) ainda não gerado.
+- **Sem persistência.** O estado vive em memória e é reiniciado a cada execução do aplicativo. A Etapa 2 dispensa persistência explicitamente; a integração com o JSON Server do projeto web fica para uma etapa posterior. O acesso a dados está isolado em `src/context/DadosContext.js`, então a troca por chamadas HTTP não deve exigir alteração nas telas.
+- **Sem autenticação nem controle de permissões.** O app assume um usuário administrador já autenticado; o perfil cadastrado em Pessoas é apenas um atributo do registro, não restringe acesso.
+- **Certificado sem arquivo.** A emissão registra o estado da matrícula e exibe o certificado na tela, mas ainda não gera PDF nem oferece compartilhamento.
+- **Sem testes automatizados.**
+- **Build nativo não gerado.** A execução foi verificada via Expo Go; não há APK nem IPA publicados.
+- **Ícones textuais** nas abas, em vez de uma biblioteca de ícones, para manter o projeto sem dependências visuais extras.
 
-## 📚 Documentação
+## Documentação
 
-- Repositório do projeto web de origem (referência de domínio e funcionalidades): [Plataforma-de-Cursos-Online](https://github.com/FernaoFerreira/Plataforma-de-Cursos-Online)
-- Documentação oficial do Expo: [docs.expo.dev](https://docs.expo.dev/)
-- Documentação oficial do React Native: [reactnative.dev/docs](https://reactnative.dev/docs/getting-started)
+- [`docs/etapa-02.md`](docs/etapa-02.md) — telas, componentes reutilizáveis, entrada de dados, adaptação a tamanhos de tela e decisões de interface
+- [`docs/etapa-03.md`](docs/etapa-03.md) — estrutura de navegação, feedback visual, Lei de Fitts, acessibilidade e roteiros de teste
+- [Documentação do Expo](https://docs.expo.dev/) · [React Navigation](https://reactnavigation.org/docs/getting-started)
 
-## 👤 Autor
+## Autor
 
-Desenvolvido por **Fernão Queiroz Ferreira** — estudante de Ciência da Computação (PUC Goiás), como trabalho da disciplina de Tecnologia de Construção de Software.
+Fernão Queiroz Ferreira — Ciência da Computação, PUC Goiás.
