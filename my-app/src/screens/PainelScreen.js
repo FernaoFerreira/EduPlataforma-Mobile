@@ -1,16 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Alert } from 'react-native';
 import Tela, { Grade } from '../components/Tela';
 import { Trilha, CartaoMetrica } from '../components/Trilha';
 import { Cartao, Etiqueta, TituloSecao } from '../components/Cartao';
 import Botao from '../components/Botao';
 import { useDados } from '../context/DadosContext';
+import { useFeedback } from '../context/FeedbackContext';
 import { cores, espaco, tipografia } from '../theme';
 
 const moeda = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export default function PainelScreen({ navigation }) {
   const dados = useDados();
+  const { mostrar } = useFeedback();
 
   const concluidas = dados.matriculas.filter((m) => m.concluida).length;
   const certificadosPendentes = dados.matriculas.filter(
@@ -109,6 +111,44 @@ export default function PainelScreen({ navigation }) {
           dica="Abre o formulário de nova matrícula"
         />
       </View>
+
+      <TituloSecao
+        texto="Persistência local"
+        apoio="Dados armazenados no dispositivo via AsyncStorage."
+      />
+      <Cartao faixa={cores.primaria}>
+        <View style={estilos.persistenciaTopo}>
+          <View style={{ flex: 1, paddingRight: espaco.sm }}>
+            <Text style={tipografia.corpoForte}>Armazenamento no dispositivo</Text>
+            <Text style={tipografia.apoio}>
+              Suas alterações em cursos, pessoas e matrículas permanecem salvas após fechar e reabrir o app.
+            </Text>
+          </View>
+          <Etiqueta texto="Ativo" tom="sucesso" />
+        </View>
+        <Botao
+          titulo="Restaurar dados de exemplo"
+          variante="secundaria"
+          onPress={() => {
+            Alert.alert(
+              'Restaurar dados de exemplo',
+              'Deseja redefinir os dados para os registros de demonstração originais? As alterações feitas serão substituídas.',
+              [
+                { text: 'Cancelar', style: 'cancel' },
+                {
+                  text: 'Restaurar',
+                  style: 'destructive',
+                  onPress: async () => {
+                    await dados.restaurarPadroes();
+                    mostrar('Dados de exemplo restaurados.', 'info');
+                  },
+                },
+              ]
+            );
+          }}
+          dica="Redefine o armazenamento para os dados iniciais"
+        />
+      </Cartao>
     </Tela>
   );
 }
@@ -119,4 +159,10 @@ const estilos = StyleSheet.create({
   alertaTopo: { marginBottom: espaco.sm },
   alertaTexto: { marginBottom: espaco.md },
   atalhos: { gap: espaco.md, marginBottom: espaco.xl },
+  persistenciaTopo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: espaco.md,
+  },
 });

@@ -24,14 +24,17 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 | Matrículas, marcação de conclusão e emissão de certificado | implementado |
 | Planos, assinaturas e registro de pagamentos | implementado |
 | Busca e filtros nas listagens | implementado |
-| Persistência e integração com o backend | pendente (ver limitações) |
+| Persistência local de dados no dispositivo (AsyncStorage) | implementado (Etapa 4) |
+| Integração remota com backend | pendente (ver limitações) |
 
 ## Tecnologias utilizadas
 
 **Aplicativo mobile:**
-- React Native 0.74 e Expo SDK 57
+- React Native e Expo SDK 57
+- `@react-native-async-storage/async-storage` 2.2.0 (armazenamento persistente local)
 - React Navigation 6 — `bottom-tabs` (abas) e `native-stack` (pilhas)
-- React Context API para estado da aplicação
+- React Context API para estado da aplicação e sincronização de dados
+- Node.js Test Runner nativo (`node:test`) para testes automatizados
 - JavaScript (sem bibliotecas de UI de terceiros: todos os componentes são próprios)
 
 **Projeto web de origem, como referência:**
@@ -42,21 +45,28 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 ```
 my-app/
 ├── App.js                      Ponto de entrada; monta os provedores e a navegação
-└── src/
-    ├── theme/index.js          Tokens de cor, espaço, tipografia e alvo de toque
-    ├── data/seed.js            Dados iniciais em memória
-    ├── context/
-    │   ├── DadosContext.js     Estado e operações CRUD
-    │   └── FeedbackContext.js  Avisos de confirmação e erro
-    ├── components/             13 componentes reutilizáveis
-    ├── navigation/index.js     Abas + pilhas
-    └── screens/                13 telas
+├── src/
+│   ├── theme/index.js          Tokens de cor, espaço, tipografia e alvo de toque
+│   ├── data/seed.js            Dados iniciais em memória / semente de demonstração
+│   ├── services/
+│   │   └── storage.js          Serviço de persistência local com AsyncStorage
+│   ├── context/
+│   │   ├── DadosContext.js     Estado, operações CRUD e sincronização com armazenamento
+│   │   └── FeedbackContext.js  Avisos de confirmação e erro
+│   ├── components/             13 componentes reutilizáveis
+│   ├── navigation/index.js     Abas + pilhas
+│   └── screens/                13 telas
+├── test/
+│   ├── runner.mjs              Executor dos testes automatizados
+│   ├── persistencia.test.mjs   Testes do serviço de armazenamento e ciclo de vida
+│   └── crud-context.test.mjs   Testes das operações de domínio e integridade
 docs/
 ├── etapa-02.md                 Protótipo de interface
-└── etapa-03.md                 Navegação, UX e acessibilidade
+├── etapa-03.md                 Navegação, UX e acessibilidade
+└── etapa-04.md                 Persistência local de dados
 ```
 
-A separação segue uma regra simples: `components/` não conhece as regras do domínio e recebe tudo por props; `screens/` compõe componentes e conversa com os contextos; `context/` concentra dados e feedback; `theme/` centraliza os tokens — nenhuma cor ou medida é escrita direto nas telas.
+A separação segue uma regra simples: `components/` não conhece as regras do domínio e recebe tudo por props; `screens/` compõe componentes e conversa com os contextos; `context/` concentra dados e feedback; `services/` isola o acesso a I/O e persistência no dispositivo; `theme/` centraliza os tokens — nenhuma cor ou medida é escrita direto nas telas.
 
 ## Execução
 
@@ -69,14 +79,22 @@ npm install
 npx expo start
 ```
 
-Com o servidor no ar, escaneie o QR code com o Expo Go, ou pressione `a` (Android) / `i` (iOS) no terminal.
+Com o servidor no ar, escaneie o QR code com o Expo Go, ou pressione `a` (Android) / `i` (iOS) / `w` (Web) no terminal.
+
+### Testes automatizados
+
+Para executar os testes automatizados de persistência e integridade relacional:
+
+```bash
+cd my-app
+node test/runner.mjs
+```
 
 ## Limitações conhecidas
 
-- **Sem persistência.** O estado vive em memória e é reiniciado a cada execução do aplicativo. A Etapa 2 dispensa persistência explicitamente; a integração com o JSON Server do projeto web fica para uma etapa posterior. O acesso a dados está isolado em `src/context/DadosContext.js`, então a troca por chamadas HTTP não deve exigir alteração nas telas.
+- **Persistência local ativa (Etapa 4):** os dados agora são armazenados no dispositivo utilizando AsyncStorage. Todas as operações de criação, edição, exclusão em cascata e regras de negócio persistem entre execuções do aplicativo. A sincronização com backend remoto (JSON Server) será abordada em etapa posterior.
 - **Sem autenticação nem controle de permissões.** O app assume um usuário administrador já autenticado; o perfil cadastrado em Pessoas é apenas um atributo do registro, não restringe acesso.
 - **Certificado sem arquivo.** A emissão registra o estado da matrícula e exibe o certificado na tela, mas ainda não gera PDF nem oferece compartilhamento.
-- **Sem testes automatizados.**
 - **Build nativo não gerado.** A execução foi verificada via Expo Go; não há APK nem IPA publicados.
 - **Ícones textuais** nas abas, em vez de uma biblioteca de ícones, para manter o projeto sem dependências visuais extras.
 
@@ -84,6 +102,7 @@ Com o servidor no ar, escaneie o QR code com o Expo Go, ou pressione `a` (Androi
 
 - [`docs/etapa-02.md`](docs/etapa-02.md) — telas, componentes reutilizáveis, entrada de dados, adaptação a tamanhos de tela e decisões de interface
 - [`docs/etapa-03.md`](docs/etapa-03.md) — estrutura de navegação, feedback visual, Lei de Fitts, acessibilidade e roteiros de teste
+- [`docs/etapa-04.md`](docs/etapa-04.md) — persistência local, justificativa técnica, estrutura dos dados, operações CRUD, telas integradas e testes
 - [Documentação do Expo](https://docs.expo.dev/) · [React Navigation](https://reactnavigation.org/docs/getting-started)
 
 ## Autor
