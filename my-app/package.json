@@ -7,7 +7,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "test": "node test/runner.mjs"
+    "test": "node test/runner.mjs",
+    "server": "npx json-server --watch db.json --port 3000",
+    "server:reset": "cp db.original.json db.json && npx json-server --watch db.json --port 3000"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
@@ -22,7 +24,8 @@
     "react-native-screens": "~4.26.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "json-server": "^0.17.3"
   },
   "private": true
 }

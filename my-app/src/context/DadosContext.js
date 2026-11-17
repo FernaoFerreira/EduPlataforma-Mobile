@@ -5,6 +5,7 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useRef,
 } from 'react';
 import { View, Text, ActivityIndicator } from 'react-native';
 import {
@@ -22,25 +23,52 @@ import {
   CHAVES_STORAGE,
   carregarTodosOsDados,
   salvarColecao,
+  salvarTodosOsDados,
   restaurarDadosIniciais,
 } from '../services/storage';
+import {
+  carregarTodosDoBackend,
+  verificarConexao,
+  criar as apiCriar,
+  atualizar as apiAtualizar,
+  remover as apiRemover,
+  atualizarParcial as apiPatch,
+  ENDPOINTS,
+} from '../services/api';
 import { cores, espaco, tipografia } from '../theme';
 
 /**
- * Camada de acesso a dados da aplicação com persistência local (Etapa 04).
+ * Camada de acesso a dados da aplicação — Etapa 05.
  *
- * Utiliza o AsyncStorage para manter os dados persistidos no dispositivo
- * entre sessões e reinicializações da aplicação.
+ * Integra três camadas de dados:
+ *   1. Backend (JSON Server) — fonte de verdade quando online.
+ *   2. AsyncStorage — cache local e fallback offline (Etapa 04).
+ *   3. Seed (seed.js) — dados de demonstração para inicialização.
  *
- * Toda a interface consome os dados por este contexto, garantindo que
- * alterações reflitam instantaneamente na interface e sejam sincronizadas
- * de forma assíncrona e transparente no armazenamento local.
+ * Estratégia:
+ *   - Na inicialização, tenta carregar do backend. Se falhar,
+ *     utiliza os dados do AsyncStorage (que, por sua vez, pode
+ *     cair no seed na primeira execução).
+ *   - Operações de escrita (criar, atualizar, remover) são enviadas
+ *     ao backend quando online. Em qualquer caso, o AsyncStorage é
+ *     atualizado como cache local para manter consistência offline.
+ *   - O estado `online` é exposto para a UI exibir o status de conexão.
  */
 
 const DadosContext = createContext(null);
 
 let contador = 0;
 const novoId = (prefixo) => `${prefixo}-${Date.now()}-${contador++}`;
+
+// Mapeamento prefixo → endpoint para o CRUD genérico.
+const PREFIXO_ENDPOINT = {
+  cat: ENDPOINTS.CATEGORIAS,
+  usr: ENDPOINTS.USUARIOS,
+  cur: ENDPOINTS.CURSOS,
+  mod: ENDPOINTS.MODULOS,
+  aul: ENDPOINTS.AULAS,
+  mat: ENDPOINTS.MATRICULAS,
+};
 
 export function DadosProvider({ children }) {
   const [categorias, setCategorias] = useState(categoriasIniciais);
@@ -54,27 +82,61 @@ export function DadosProvider({ children }) {
   const [pagamentos, setPagamentos] = useState(pagamentosIniciais);
 
   const [carregando, setCarregando] = useState(true);
+  const [online, setOnline] = useState(false);
+  const [fonteInicial, setFonteInicial] = useState('local'); // 'backend' | 'local'
 
-  // ---- Carga inicial assíncrona do armazenamento local ----
+  const onlineRef = useRef(false);
+
+  // ---- Carga inicial: tenta backend → fallback AsyncStorage ----
   useEffect(() => {
     let montado = true;
 
     async function inicializarDados() {
       try {
-        const dadosArmazenados = await carregarTodosOsDados();
+        // Tenta carregar do backend primeiro
+        const dadosBackend = await carregarTodosDoBackend();
         if (montado) {
-          setCategorias(dadosArmazenados.categorias);
-          setUsuarios(dadosArmazenados.usuarios);
-          setCursos(dadosArmazenados.cursos);
-          setModulos(dadosArmazenados.modulos);
-          setAulas(dadosArmazenados.aulas);
-          setMatriculas(dadosArmazenados.matriculas);
-          setPlanos(dadosArmazenados.planos);
-          setAssinaturas(dadosArmazenados.assinaturas);
-          setPagamentos(dadosArmazenados.pagamentos);
+          setCategorias(dadosBackend.categorias);
+          setUsuarios(dadosBackend.usuarios);
+          setCursos(dadosBackend.cursos);
+          setModulos(dadosBackend.modulos);
+          setAulas(dadosBackend.aulas);
+          setMatriculas(dadosBackend.matriculas);
+          setPlanos(dadosBackend.planos);
+          setAssinaturas(dadosBackend.assinaturas);
+          setPagamentos(dadosBackend.pagamentos);
+          setOnline(true);
+          onlineRef.current = true;
+          setFonteInicial('backend');
+
+          // Sincroniza o cache local com os dados do backend
+          await salvarTodosOsDados(dadosBackend);
         }
-      } catch (erro) {
-        console.error('[DadosContext] Erro ao carregar dados locais:', erro);
+      } catch (erroBackend) {
+        console.warn('[DadosContext] Backend indisponível, carregando dados locais:', erroBackend.message);
+        try {
+          const dadosLocais = await carregarTodosOsDados();
+          if (montado) {
+            setCategorias(dadosLocais.categorias);
+            setUsuarios(dadosLocais.usuarios);
+            setCursos(dadosLocais.cursos);
+            setModulos(dadosLocais.modulos);
+            setAulas(dadosLocais.aulas);
+            setMatriculas(dadosLocais.matriculas);
+            setPlanos(dadosLocais.planos);
+            setAssinaturas(dadosLocais.assinaturas);
+            setPagamentos(dadosLocais.pagamentos);
+            setOnline(false);
+            onlineRef.current = false;
+            setFonteInicial('local');
+          }
+        } catch (erroLocal) {
+          console.error('[DadosContext] Erro ao carregar dados locais:', erroLocal);
+          if (montado) {
+            setOnline(false);
+            onlineRef.current = false;
+          }
+        }
       } finally {
         if (montado) {
           setCarregando(false);
@@ -83,21 +145,39 @@ export function DadosProvider({ children }) {
     }
 
     inicializarDados();
-
-    return () => {
-      montado = false;
-    };
+    return () => { montado = false; };
   }, []);
 
-  // ---- Fábrica genérica de CRUD com persistência automática ----
+  // ---- Verificação periódica de conectividade (a cada 30s) ----
+  useEffect(() => {
+    const intervalo = setInterval(async () => {
+      const conectado = await verificarConexao();
+      setOnline(conectado);
+      onlineRef.current = conectado;
+    }, 30000);
+
+    return () => clearInterval(intervalo);
+  }, []);
+
+  // ---- Fábrica genérica de CRUD com integração backend + persistência local ----
   const criarCrud = (setter, prefixo, chaveStorage) => ({
     criar: (dados) => {
-      const registro = { ...dados, id: novoId(prefixo) };
+      const id = novoId(prefixo);
+      const registro = { ...dados, id };
       setter((atual) => {
         const novo = [...atual, registro];
         salvarColecao(chaveStorage, novo);
         return novo;
       });
+
+      // Envia ao backend de forma assíncrona (fire-and-forget).
+      const endpoint = PREFIXO_ENDPOINT[prefixo];
+      if (endpoint && onlineRef.current) {
+        apiCriar(endpoint, registro).catch((err) =>
+          console.warn(`[API] Falha ao criar em ${endpoint}:`, err.message)
+        );
+      }
+
       return registro;
     },
     atualizar: (id, dados) => {
@@ -113,6 +193,14 @@ export function DadosProvider({ children }) {
         salvarColecao(chaveStorage, novo);
         return novo;
       });
+
+      const endpoint = PREFIXO_ENDPOINT[prefixo];
+      if (endpoint && onlineRef.current && atualizado) {
+        apiAtualizar(endpoint, id, atualizado).catch((err) =>
+          console.warn(`[API] Falha ao atualizar em ${endpoint}/${id}:`, err.message)
+        );
+      }
+
       return atualizado;
     },
     remover: (id) => {
@@ -121,6 +209,13 @@ export function DadosProvider({ children }) {
         salvarColecao(chaveStorage, novo);
         return novo;
       });
+
+      const endpoint = PREFIXO_ENDPOINT[prefixo];
+      if (endpoint && onlineRef.current) {
+        apiRemover(endpoint, id).catch((err) =>
+          console.warn(`[API] Falha ao remover ${endpoint}/${id}:`, err.message)
+        );
+      }
     },
   });
 
@@ -149,7 +244,7 @@ export function DadosProvider({ children }) {
     []
   );
 
-  // ---- Remoções em cascata com persistência consistente ----
+  // ---- Remoções em cascata com backend + persistência ----
   const removerCurso = useCallback((id) => {
     setModulos((modulosAtuais) => {
       const modulosDoCurso = modulosAtuais
@@ -158,44 +253,87 @@ export function DadosProvider({ children }) {
       const modulosRestantes = modulosAtuais.filter((m) => m.cursoId !== id);
 
       setAulas((aulasAtuais) => {
+        const aulasRemovidas = aulasAtuais.filter((a) => modulosDoCurso.includes(a.moduloId));
         const aulasRestantes = aulasAtuais.filter(
           (a) => !modulosDoCurso.includes(a.moduloId)
         );
         salvarColecao(CHAVES_STORAGE.AULAS, aulasRestantes);
+
+        // Remove aulas do backend
+        if (onlineRef.current) {
+          aulasRemovidas.forEach((a) =>
+            apiRemover(ENDPOINTS.AULAS, a.id).catch(() => {})
+          );
+        }
+
         return aulasRestantes;
       });
 
       salvarColecao(CHAVES_STORAGE.MODULOS, modulosRestantes);
+
+      // Remove módulos do backend
+      if (onlineRef.current) {
+        modulosDoCurso.forEach((mId) =>
+          apiRemover(ENDPOINTS.MODULOS, mId).catch(() => {})
+        );
+      }
+
       return modulosRestantes;
     });
 
     setMatriculas((matriculasAtuais) => {
+      const matriculasRemovidas = matriculasAtuais.filter((mat) => mat.cursoId === id);
       const matriculasRestantes = matriculasAtuais.filter((mat) => mat.cursoId !== id);
       salvarColecao(CHAVES_STORAGE.MATRICULAS, matriculasRestantes);
+
+      if (onlineRef.current) {
+        matriculasRemovidas.forEach((mat) =>
+          apiRemover(ENDPOINTS.MATRICULAS, mat.id).catch(() => {})
+        );
+      }
+
       return matriculasRestantes;
     });
 
     setCursos((cursosAtuais) => {
       const cursosRestantes = cursosAtuais.filter((c) => c.id !== id);
       salvarColecao(CHAVES_STORAGE.CURSOS, cursosRestantes);
+
+      if (onlineRef.current) {
+        apiRemover(ENDPOINTS.CURSOS, id).catch(() => {});
+      }
+
       return cursosRestantes;
     });
   }, []);
 
   const removerModulo = useCallback((id) => {
     setAulas((aulasAtuais) => {
+      const aulasRemovidas = aulasAtuais.filter((a) => a.moduloId === id);
       const aulasRestantes = aulasAtuais.filter((a) => a.moduloId !== id);
       salvarColecao(CHAVES_STORAGE.AULAS, aulasRestantes);
+
+      if (onlineRef.current) {
+        aulasRemovidas.forEach((a) =>
+          apiRemover(ENDPOINTS.AULAS, a.id).catch(() => {})
+        );
+      }
+
       return aulasRestantes;
     });
     setModulos((modulosAtuais) => {
       const modulosRestantes = modulosAtuais.filter((m) => m.id !== id);
       salvarColecao(CHAVES_STORAGE.MODULOS, modulosRestantes);
+
+      if (onlineRef.current) {
+        apiRemover(ENDPOINTS.MODULOS, id).catch(() => {});
+      }
+
       return modulosRestantes;
     });
   }, []);
 
-  // ---- Regras de negócio com persistência ----
+  // ---- Regras de negócio com backend ----
   const alternarConclusao = useCallback((matriculaId) => {
     setMatriculas((atual) => {
       const novo = atual.map((m) => {
@@ -208,6 +346,16 @@ export function DadosProvider({ children }) {
         };
       });
       salvarColecao(CHAVES_STORAGE.MATRICULAS, novo);
+
+      // Envia a atualização parcial ao backend
+      const matricula = novo.find((m) => m.id === matriculaId);
+      if (onlineRef.current && matricula) {
+        apiPatch(ENDPOINTS.MATRICULAS, matriculaId, {
+          concluida: matricula.concluida,
+          certificadoEmitido: matricula.certificadoEmitido,
+        }).catch(() => {});
+      }
+
       return novo;
     });
   }, []);
@@ -218,6 +366,11 @@ export function DadosProvider({ children }) {
         m.id === matriculaId ? { ...m, certificadoEmitido: true } : m
       );
       salvarColecao(CHAVES_STORAGE.MATRICULAS, novo);
+
+      if (onlineRef.current) {
+        apiPatch(ENDPOINTS.MATRICULAS, matriculaId, { certificadoEmitido: true }).catch(() => {});
+      }
+
       return novo;
     });
   }, []);
@@ -228,6 +381,12 @@ export function DadosProvider({ children }) {
         a.id === assinaturaId ? { ...a, ativa: !a.ativa } : a
       );
       salvarColecao(CHAVES_STORAGE.ASSINATURAS, novo);
+
+      const assinatura = novo.find((a) => a.id === assinaturaId);
+      if (onlineRef.current && assinatura) {
+        apiPatch(ENDPOINTS.ASSINATURAS, assinaturaId, { ativa: assinatura.ativa }).catch(() => {});
+      }
+
       return novo;
     });
   }, []);
@@ -238,8 +397,38 @@ export function DadosProvider({ children }) {
         p.id === pagamentoId ? { ...p, status: 'Pago' } : p
       );
       salvarColecao(CHAVES_STORAGE.PAGAMENTOS, novo);
+
+      if (onlineRef.current) {
+        apiPatch(ENDPOINTS.PAGAMENTOS, pagamentoId, { status: 'Pago' }).catch(() => {});
+      }
+
       return novo;
     });
+  }, []);
+
+  // ---- Sincronização manual com o backend ----
+  const sincronizarComBackend = useCallback(async () => {
+    try {
+      const dados = await carregarTodosDoBackend();
+      setCategorias(dados.categorias);
+      setUsuarios(dados.usuarios);
+      setCursos(dados.cursos);
+      setModulos(dados.modulos);
+      setAulas(dados.aulas);
+      setMatriculas(dados.matriculas);
+      setPlanos(dados.planos);
+      setAssinaturas(dados.assinaturas);
+      setPagamentos(dados.pagamentos);
+      setOnline(true);
+      onlineRef.current = true;
+      await salvarTodosOsDados(dados);
+      return { sucesso: true };
+    } catch (erro) {
+      console.warn('[DadosContext] Falha ao sincronizar:', erro.message);
+      setOnline(false);
+      onlineRef.current = false;
+      return { sucesso: false, erro: erro.message };
+    }
   }, []);
 
   // ---- Restauração dos dados iniciais de demonstração ----
@@ -301,6 +490,8 @@ export function DadosProvider({ children }) {
       assinaturas,
       pagamentos,
       carregando,
+      online,
+      fonteInicial,
       crudCategorias,
       crudCursos,
       crudUsuarios,
@@ -313,6 +504,7 @@ export function DadosProvider({ children }) {
       emitirCertificado,
       alternarAssinatura,
       registrarPagamento,
+      sincronizarComBackend,
       restaurarPadroes,
       ...consultas,
     }),
@@ -327,6 +519,8 @@ export function DadosProvider({ children }) {
       assinaturas,
       pagamentos,
       carregando,
+      online,
+      fonteInicial,
       crudCategorias,
       crudCursos,
       crudUsuarios,
@@ -339,6 +533,7 @@ export function DadosProvider({ children }) {
       emitirCertificado,
       alternarAssinatura,
       registrarPagamento,
+      sincronizarComBackend,
       restaurarPadroes,
       consultas,
     ]
@@ -365,7 +560,7 @@ export function DadosProvider({ children }) {
             color: cores.textoMudo,
           }}
         >
-          Carregando dados locais...
+          Conectando ao servidor...
         </Text>
       </View>
     );

@@ -23,6 +23,16 @@ export default function PainelScreen({ navigation }) {
   const irPara = (aba, tela) =>
     navigation.navigate(aba, tela ? { screen: tela } : undefined);
 
+  const sincronizar = async () => {
+    mostrar('Sincronizando com o servidor...', 'info');
+    const resultado = await dados.sincronizarComBackend();
+    if (resultado.sucesso) {
+      mostrar('Dados sincronizados com o servidor.', 'sucesso');
+    } else {
+      mostrar('Falha ao sincronizar. Usando dados locais.', 'erro');
+    }
+  };
+
   return (
     <Tela>
       <Text style={estilos.saudacao} accessibilityRole="header">
@@ -113,9 +123,40 @@ export default function PainelScreen({ navigation }) {
       </View>
 
       <TituloSecao
-        texto="Persistência local"
-        apoio="Dados armazenados no dispositivo via AsyncStorage."
+        texto="Conexão e dados"
+        apoio="Status da integração com o backend e armazenamento local."
       />
+
+      {/* Cartão de status do backend */}
+      <Cartao faixa={dados.online ? cores.sucesso : cores.aviso}>
+        <View style={estilos.persistenciaTopo}>
+          <View style={{ flex: 1, paddingRight: espaco.sm }}>
+            <Text style={tipografia.corpoForte}>
+              {dados.online ? 'Conectado ao servidor' : 'Modo offline'}
+            </Text>
+            <Text style={tipografia.apoio}>
+              {dados.online
+                ? 'As operações são salvas no servidor e no dispositivo.'
+                : 'Sem conexão com o servidor. Os dados são salvos localmente e serão sincronizados quando a conexão for restabelecida.'}
+            </Text>
+          </View>
+          <Etiqueta
+            texto={dados.online ? 'Online' : 'Offline'}
+            tom={dados.online ? 'sucesso' : 'aviso'}
+          />
+        </View>
+        <Text style={[tipografia.apoio, { marginBottom: espaco.sm }]}>
+          Fonte de dados: {dados.fonteInicial === 'backend' ? 'Servidor (JSON Server)' : 'Armazenamento local (AsyncStorage)'}
+        </Text>
+        <Botao
+          titulo="Sincronizar com servidor"
+          variante="secundaria"
+          onPress={sincronizar}
+          dica="Busca os dados mais recentes do servidor"
+        />
+      </Cartao>
+
+      {/* Cartão de persistência local (mantido da Etapa 04) */}
       <Cartao faixa={cores.primaria}>
         <View style={estilos.persistenciaTopo}>
           <View style={{ flex: 1, paddingRight: espaco.sm }}>
