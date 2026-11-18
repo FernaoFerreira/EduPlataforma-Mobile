@@ -28,27 +28,34 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 | Integração com backend JSON Server | implementado (Etapa 5) |
 | Modo online/offline com escrita dual | implementado (Etapa 5) |
 | Sincronização manual com servidor | implementado (Etapa 5) |
+| Integração com API externa (Open Library API para consulta de bibliografia e referências) | implementado (Etapa 6) |
 
 ## Arquitetura
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                   React Native / Expo                │
-│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │  Screens   │→ │ DadosContext │→ │  api.js      │─┼──→ JSON Server
-│  │  (13 telas)│  │  (estado +   │  │  (fetch HTTP)│ │    (porta 3000)
-│  └────────────┘  │  CRUD)       │  └──────────────┘ │
-│                  │              │→ ┌──────────────┐  │
-│                  │              │  │ storage.js   │  │
-│                  └──────────────┘  │ (AsyncStorage)│ │
-│                                    └──────────────┘  │
-└──────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                          React Native / Expo                           │
+│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐                   │
+│  │  Screens   │→ │ DadosContext │→ │  api.js      │───→ JSON Server    │
+│  │  (13 telas)│  │  (estado +   │  │  (fetch HTTP)│     (porta 3000)   │
+│  └─────┬──────┘  │  CRUD)       │  └──────────────┘                   │
+│        │         │              │→ ┌──────────────┐                    │
+│        │         │              │  │ storage.js   │                    │
+│        │         └──────────────┘  │ (AsyncStorage)│                   │
+│        │                           └──────────────┘                    │
+│        ▼                                                               │
+│  ┌──────────────┐                                                      │
+│  │ livrosApi.js │─────────────────────────────────→ Open Library API   │
+│  │ (fetch HTTP) │                                   (search.json)      │
+│  └──────────────┘                                                      │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Fluxo de dados:**
 - **Leitura**: tenta backend → fallback AsyncStorage → seed (seed.js).
 - **Escrita**: atualiza estado React imediatamente + persiste no AsyncStorage + envia ao backend (fire-and-forget).
 - **Offline**: funciona normalmente com dados locais; operações são armazenadas localmente.
+- **Serviço externo**: consulta de obras e referências bibliográficas na Open Library API com tratamento completo dos 4 estados (carregamento, sucesso, ausência de dados e erro).
 
 ## Tecnologias utilizadas
 
@@ -60,9 +67,12 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 - Node.js Test Runner nativo (`node:test`) para testes automatizados
 - JavaScript (sem bibliotecas de UI de terceiros: todos os componentes são próprios)
 
-**Backend:**
+**Backend local:**
 - JSON Server 0.17.3 — API REST completa a partir de arquivo `db.json`
 - 9 endpoints: categorias, usuarios, cursos, modulos, aulas, matriculas, planos, assinaturas, pagamentos
+
+**Serviço externo:**
+- Open Library Search API (`https://openlibrary.org/search.json`) — consulta de livros e literatura complementar em tempo real
 
 **Projeto web de origem, como referência:**
 - React + Vite, React Router, Axios, JSON Server
@@ -79,6 +89,7 @@ my-app/
 │   ├── data/seed.js            Dados iniciais em memória / semente de demonstração
 │   ├── services/
 │   │   ├── api.js              Cliente HTTP REST para o JSON Server
+│   │   ├── livrosApi.js        Cliente HTTP para a Open Library API (Etapa 6)
 │   │   └── storage.js          Serviço de persistência local com AsyncStorage
 │   ├── context/
 │   │   ├── DadosContext.js     Estado, operações CRUD, integração backend + local
@@ -90,15 +101,17 @@ my-app/
 │   ├── runner.mjs              Executor dos testes automatizados
 │   ├── persistencia.test.mjs   Testes do serviço de armazenamento e ciclo de vida
 │   ├── crud-context.test.mjs   Testes das operações de domínio e integridade
-│   └── api.test.mjs            Testes do serviço de API e integridade do db.json
+│   ├── api.test.mjs            Testes do serviço de API e integridade do db.json
+│   └── livrosApi.test.mjs      Testes da integração com a Open Library API (Etapa 6)
 docs/
 ├── etapa-02.md                 Protótipo de interface
 ├── etapa-03.md                 Navegação, UX e acessibilidade
 ├── etapa-04.md                 Persistência local de dados
-└── etapa-05.md                 Primeira versão funcional com backend
+├── etapa-05.md                 Primeira versão funcional com backend
+└── etapa-06.md                 Integração com API ou serviço externo
 ```
 
-A separação segue uma regra simples: `components/` não conhece as regras do domínio e recebe tudo por props; `screens/` compõe componentes e conversa com os contextos; `context/` concentra dados e feedback; `services/` isola o acesso a I/O (API HTTP e persistência local); `theme/` centraliza os tokens — nenhuma cor ou medida é escrita direto nas telas.
+A separação segue uma regra simples: `components/` não conhece as regras do domínio e recebe tudo por props; `screens/` compõe componentes e conversa com os contextos; `context/` concentra dados e feedback; `services/` isola o acesso a I/O (API HTTP local, serviço externo e persistência local); `theme/` centraliza os tokens — nenhuma cor ou medida é escrita direto nas telas.
 
 ## Execução
 
@@ -126,7 +139,7 @@ Com o servidor no ar, escaneie o QR code com o Expo Go, ou pressione `a` (Androi
 
 ### Testes automatizados
 
-Para executar os 26 testes automatizados (persistência, domínio e API):
+Para executar os 36 testes automatizados (persistência, domínio, API backend e serviço externo):
 
 ```bash
 cd my-app
@@ -153,6 +166,7 @@ cp db.original.json db.json
 - [`docs/etapa-03.md`](docs/etapa-03.md) — estrutura de navegação, feedback visual, Lei de Fitts, acessibilidade e roteiros de teste
 - [`docs/etapa-04.md`](docs/etapa-04.md) — persistência local, justificativa técnica, estrutura dos dados, operações CRUD, telas integradas e testes
 - [`docs/etapa-05.md`](docs/etapa-05.md) — integração com backend, fluxo de negócio, modo online/offline, decisões técnicas e testes
+- [`docs/etapa-06.md`](docs/etapa-06.md) — integração com serviço externo (Open Library API), endpoints, 4 estados de UI e testes
 - [Documentação do Expo](https://docs.expo.dev/) · [React Navigation](https://reactnavigation.org/docs/getting-started)
 
 ## Autor

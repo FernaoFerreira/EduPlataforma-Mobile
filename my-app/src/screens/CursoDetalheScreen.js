@@ -1,10 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, StyleSheet, ActivityIndicator, Linking } from 'react-native';
 import Tela from '../components/Tela';
 import { Cartao, Etiqueta, TituloSecao, EstadoVazio } from '../components/Cartao';
 import Botao from '../components/Botao';
+import CampoTexto from '../components/CampoTexto';
 import { useDados } from '../context/DadosContext';
-import { cores, espaco, tipografia } from '../theme';
+import { buscarLivrosPorTermo } from '../services/livrosApi';
+import { cores, espaco, tipografia, raio } from '../theme';
 
 const moeda = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -12,6 +14,56 @@ export default function CursoDetalheScreen({ navigation, route }) {
   const { cursoId } = route.params;
   const dados = useDados();
   const curso = dados.cursoPorId(cursoId);
+
+  // Estados da integração externa com a Open Library
+  const [termoBusca, setTermoBusca] = useState('');
+  const [statusLivros, setStatusLivros] = useState('ocioso'); // 'carregando' | 'sucesso' | 'erro' | 'vazio' | 'ocioso'
+  const [livros, setLivros] = useState([]);
+  const [totalLivros, setTotalLivros] = useState(0);
+  const [erroLivros, setErroLivros] = useState(null);
+
+  // Define o termo de busca inicial com base no título do curso
+  useEffect(() => {
+    if (curso) {
+      // Limpa sufixos comuns para melhorar o match na API
+      const termoSugerido = curso.titulo
+        .replace(/ do zero| básico| avançado| fundamentos/gi, '')
+        .trim();
+      setTermoBusca(termoSugerido || curso.titulo);
+    }
+  }, [curso?.id]);
+
+  // Função para executar a busca externa
+  const carregarLivros = useCallback(async (termo) => {
+    const termoAlvo = (termo || termoBusca || '').trim();
+    if (!termoAlvo) return;
+
+    setStatusLivros('carregando');
+    setErroLivros(null);
+
+    try {
+      const resultado = await buscarLivrosPorTermo(termoAlvo, 4);
+      if (resultado.livros.length === 0) {
+        setLivros([]);
+        setTotalLivros(0);
+        setStatusLivros('vazio');
+      } else {
+        setLivros(resultado.livros);
+        setTotalLivros(resultado.total);
+        setStatusLivros('sucesso');
+      }
+    } catch (erro) {
+      setErroLivros(erro.message || 'Falha ao consultar a Open Library.');
+      setStatusLivros('erro');
+    }
+  }, [termoBusca]);
+
+  // Carrega automaticamente os livros quando a tela abre com o curso definido
+  useEffect(() => {
+    if (curso && termoBusca && statusLivros === 'ocioso') {
+      carregarLivros(termoBusca);
+    }
+  }, [curso, termoBusca, statusLivros, carregarLivros]);
 
   // O curso pode ter sido excluído em outra tela enquanto esta estava na pilha.
   if (!curso) {
@@ -86,6 +138,129 @@ export default function CursoDetalheScreen({ navigation, route }) {
         </>
       )}
 
+      {/* SEÇÃO DA ETAPA 06: INTEGRAÇÃO COM SERVIÇO EXTERNO (OPEN LIBRARY API) */}
+      <TituloSecao
+        texto="Bibliografia e referências recomendadas"
+        apoio="Obras e literatura complementar consultadas via Open Library API."
+      />
+
+      <View style={estilos.buscaContainer}>
+        <CampoTexto
+          rotulo="Pesquisar referências por tema"
+          valor={termoBusca}
+          onChangeText={setTermoBusca}
+          placeholder="Ex.: React Native, SQL, Design de Interface..."
+          ajuda="Consulte livros do acervo mundial relacionados ao curso."
+          returnKeyType="search"
+          onSubmitEditing={() => carregarLivros(termoBusca)}
+        />
+        <View style={estilos.botoesBusca}>
+          <Botao
+            titulo="Buscar referências"
+            onPress={() => carregarLivros(termoBusca)}
+            dica="Consulta livros na Open Library usando o termo digitado"
+          />
+        </View>
+      </View>
+
+      {/* ESTADO 1: CARREGANDO */}
+      {statusLivros === 'carregando' && (
+        <View
+          style={estilos.estadoContainer}
+          accessibilityRole="progressbar"
+          accessibilityLabel="Consultando acervo da Open Library"
+        >
+          <ActivityIndicator size="small" color={cores.primaria} />
+          <Text style={estilos.estadoTexto}>
+            Consultando acervo da Open Library para "{termoBusca}"...
+          </Text>
+        </View>
+      )}
+
+      {/* ESTADO 2: ERRO */}
+      {statusLivros === 'erro' && (
+        <Cartao faixa={cores.erro} estilo={estilos.cartaoErro}>
+          <View style={estilos.erroTopo}>
+            <Etiqueta texto="Falha de conexão externa" tom="erro" />
+          </View>
+          <Text style={[tipografia.corpo, estilos.erroTexto]}>
+            {erroLivros}
+          </Text>
+          <Botao
+            titulo="Tentar novamente"
+            variante="secundaria"
+            onPress={() => carregarLivros(termoBusca)}
+            dica="Tenta consultar novamente a Open Library"
+          />
+        </Cartao>
+      )}
+
+      {/* ESTADO 3: AUSÊNCIA DE DADOS (VAZIO) */}
+      {statusLivros === 'vazio' && (
+        <EstadoVazio
+          titulo="Nenhuma obra encontrada"
+          descricao={`A Open Library não retornou obras para o termo "${termoBusca}". Tente pesquisar por palavras-chave mais gerais.`}
+        >
+          <Botao
+            titulo={`Buscar por "${categoria?.nome || 'Educação'}"`}
+            variante="secundaria"
+            onPress={() => {
+              const termoCat = categoria?.nome || 'Educação';
+              setTermoBusca(termoCat);
+              carregarLivros(termoCat);
+            }}
+            dica="Busca referências usando o nome da categoria"
+          />
+        </EstadoVazio>
+      )}
+
+      {/* ESTADO 4: SUCESSO COM DADOS */}
+      {statusLivros === 'sucesso' && (
+        <View style={estilos.listaLivros}>
+          <Text style={estilos.totalResultados} accessibilityLiveRegion="polite">
+            {totalLivros > livros.length
+              ? `Exibindo ${livros.length} principais de ${totalLivros} referências encontradas:`
+              : `${livros.length} ${livros.length === 1 ? 'referência encontrada' : 'referências encontradas'}:`}
+          </Text>
+
+          {livros.map((livro) => (
+            <Cartao
+              key={livro.id}
+              estilo={estilos.livroItem}
+              faixa={cores.primaria}
+              onPress={
+                livro.linkUrl
+                  ? () => Linking.openURL(livro.linkUrl).catch(() => {})
+                  : undefined
+              }
+              rotuloAcessivel={`Livro ${livro.titulo}, autores ${livro.autoresTexto}`}
+              dica={livro.linkUrl ? 'Abre o registro do livro no site da Open Library' : undefined}
+            >
+              <Text style={tipografia.corpoForte}>{livro.titulo}</Text>
+              <Text style={tipografia.apoio}>
+                {livro.autoresTexto}
+                {livro.anoPublicacao ? ` · 1ª pub. ${livro.anoPublicacao}` : ''}
+              </Text>
+
+              <View style={estilos.livroRodape}>
+                <Etiqueta
+                  texto={`${livro.edicoes} ${livro.edicoes === 1 ? 'edição' : 'edições'}`}
+                  tom="neutro"
+                />
+                {!!livro.isbn && (
+                  <Text style={tipografia.micro}>ISBN: {livro.isbn}</Text>
+                )}
+                {!!livro.linkUrl && (
+                  <Text style={estilos.linkExterno}>
+                    Ver na Open Library ↗
+                  </Text>
+                )}
+              </View>
+            </Cartao>
+          ))}
+        </View>
+      )}
+
       <TituloSecao texto="Matrículas" apoio={`${concluidas} de ${matriculas.length} concluíram o curso.`} />
       {matriculas.length === 0 ? (
         <EstadoVazio titulo="Nenhum aluno matriculado" descricao="As matrículas feitas neste curso aparecem aqui." />
@@ -133,4 +308,35 @@ const estilos = StyleSheet.create({
   infoValor: { ...tipografia.corpoForte, textAlign: 'right', flexShrink: 1 },
   modulo: { marginBottom: espaco.sm, gap: espaco.xs },
   acoes: { marginTop: espaco.xl, marginBottom: espaco.xl },
+
+  // Estilos da integração externa (Open Library)
+  buscaContainer: { marginBottom: espaco.md },
+  botoesBusca: { marginTop: -espaco.sm, marginBottom: espaco.sm },
+  estadoContainer: {
+    padding: espaco.lg,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: cores.papel,
+    borderRadius: raio.md,
+    borderWidth: 1,
+    borderColor: cores.borda,
+    marginBottom: espaco.md,
+    gap: espaco.sm,
+  },
+  estadoTexto: { ...tipografia.apoio, color: cores.textoMudo, textAlign: 'center' },
+  cartaoErro: { marginBottom: espaco.md, gap: espaco.sm },
+  erroTopo: { marginBottom: espaco.xs },
+  erroTexto: { ...tipografia.corpo, color: cores.texto, marginBottom: espaco.xs },
+  listaLivros: { gap: espaco.sm, marginBottom: espaco.md },
+  totalResultados: { ...tipografia.apoio, marginBottom: espaco.xs },
+  livroItem: { gap: espaco.xs },
+  livroRodape: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: espaco.sm,
+    marginTop: espaco.xs,
+  },
+  linkExterno: { ...tipografia.micro, color: cores.primaria, fontWeight: '700' },
 });
