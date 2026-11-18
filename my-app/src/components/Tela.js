@@ -3,6 +3,7 @@ import {
   View, ScrollView, StyleSheet, KeyboardAvoidingView, Platform, useWindowDimensions,
 } from 'react-native';
 import { cores, espaco } from '../theme';
+import { usePreferencias } from '../context/PreferenciasContext';
 
 /**
  * Adaptação a diferentes tamanhos de tela.
@@ -30,6 +31,7 @@ export function useLayoutResponsivo() {
  */
 export default function Tela({ children, comRolagem = true, estiloConteudo }) {
   const { larguraMaxima } = useLayoutResponsivo();
+  const { coresTema } = usePreferencias();
 
   const corpo = (
     <View style={[estilos.limite, { maxWidth: larguraMaxima }, estiloConteudo]}>
@@ -39,7 +41,7 @@ export default function Tela({ children, comRolagem = true, estiloConteudo }) {
 
   return (
     <KeyboardAvoidingView
-      style={estilos.raiz}
+      style={[estilos.raiz, { backgroundColor: coresTema?.fundo || cores.fundo }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {comRolagem ? (

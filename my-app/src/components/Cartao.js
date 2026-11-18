@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { cores, espaco, raio, tipografia, sombra, alvo } from '../theme';
+import { usePreferencias } from '../context/PreferenciasContext';
 
 /**
  * Superfície de conteúdo. Quando recebe onPress, vira um alvo de toque com
@@ -12,8 +13,16 @@ import { cores, espaco, raio, tipografia, sombra, alvo } from '../theme';
  * também é dito em texto pela Etiqueta.
  */
 export function Cartao({ children, onPress, faixa, rotuloAcessivel, dica, estilo }) {
+  const { coresTema } = usePreferencias();
   const conteudo = (
-    <View style={[estilos.cartao, !!faixa && { borderLeftWidth: 5, borderLeftColor: faixa }, estilo]}>
+    <View
+      style={[
+        estilos.cartao,
+        coresTema && { backgroundColor: coresTema.papel, borderColor: coresTema.borda },
+        !!faixa && { borderLeftWidth: 5, borderLeftColor: faixa },
+        estilo,
+      ]}
+    >
       {children}
     </View>
   );
@@ -67,10 +76,18 @@ export function TituloSecao({ texto, apoio }) {
  * possível — uma tela vazia é um convite para agir, não um beco sem saída.
  */
 export function EstadoVazio({ titulo, descricao, children }) {
+  const { coresTema } = usePreferencias();
   return (
-    <View style={estilos.vazio}>
-      <Text style={estilos.vazioTitulo}>{titulo}</Text>
-      <Text style={estilos.vazioDescricao}>{descricao}</Text>
+    <View
+      style={[
+        estilos.vazio,
+        coresTema && { backgroundColor: coresTema.papel, borderColor: coresTema.borda },
+      ]}
+    >
+      <Text style={[estilos.vazioTitulo, coresTema && { color: coresTema.tinta }]}>{titulo}</Text>
+      <Text style={[estilos.vazioDescricao, coresTema && { color: coresTema.textoSecundario }]}>
+        {descricao}
+      </Text>
       {children}
     </View>
   );

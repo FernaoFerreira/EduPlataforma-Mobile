@@ -29,26 +29,34 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 | Modo online/offline com escrita dual | implementado (Etapa 5) |
 | Sincronização manual com servidor | implementado (Etapa 5) |
 | Integração com API externa (Open Library API para consulta de bibliografia e referências) | implementado (Etapa 6) |
+| Gerenciamento de estado global compartilhado (PreferenciasContext: tema claro/escuro, aluno ativo, controle de bibliografia) | implementado (Etapa 7) |
+| Integração com recursos nativos do dispositivo (Share API, Permissions, Vibration API, exportação de arquivos) | implementado (Etapa 7) |
 
 ## Arquitetura
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│                          React Native / Expo                           │
-│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐                   │
-│  │  Screens   │→ │ DadosContext │→ │  api.js      │───→ JSON Server    │
-│  │  (13 telas)│  │  (estado +   │  │  (fetch HTTP)│     (porta 3000)   │
-│  └─────┬──────┘  │  CRUD)       │  └──────────────┘                   │
-│        │         │              │→ ┌──────────────┐                    │
-│        │         │              │  │ storage.js   │                    │
-│        │         └──────────────┘  │ (AsyncStorage)│                   │
-│        │                           └──────────────┘                    │
-│        ▼                                                               │
-│  ┌──────────────┐                                                      │
-│  │ livrosApi.js │─────────────────────────────────→ Open Library API   │
-│  │ (fetch HTTP) │                                   (search.json)      │
-│  └──────────────┘                                                      │
-└────────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                 React Native / Expo                                    │
+│  ┌───────────────────────┐                                                             │
+│  │ PreferenciasContext   │ ──(tema claro/escuro, aluno ativo, bibliografia)──┐         │
+│  │ (AsyncStorage)        │                                                   │         │
+│  └───────────────────────┘                                                   │         │
+│        │                                                                     │         │
+│        ▼                                                                     ▼         │
+│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐                    ┌─────────────┐ │
+│  │  Screens   │→ │ DadosContext │→ │  api.js      │───→ JSON Server    │ dispositivo │ │
+│  │  (13 telas)│  │  (estado +   │  │  (fetch HTTP)│     (porta 3000)   │ (Share API, │ │
+│  └─────┬──────┘  │  CRUD)       │  └──────────────┘                    │ Permissions,│ │
+│        │         │              │→ ┌──────────────┐                    │ Vibration)  │ │
+│        │         │              │  │ storage.js   │                    └──────┬──────┘ │
+│        │         └──────────────┘  │ (AsyncStorage)│                          │        │
+│        │                           └──────────────┘                          │        │
+│        ▼                                                                     ▼        │
+│  ┌──────────────┐                                                     ┌─────────────┐ │
+│  │ livrosApi.js │─────────────────────────────────→ Open Library API  │ Sistema Op. │ │
+│  │ (fetch HTTP) │                                   (search.json)     │ (Android/iOS│ │
+│  └──────────────┘                                                     └─────────────┘ │
+└────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Fluxo de dados:**
@@ -56,6 +64,8 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 - **Escrita**: atualiza estado React imediatamente + persiste no AsyncStorage + envia ao backend (fire-and-forget).
 - **Offline**: funciona normalmente com dados locais; operações são armazenadas localmente.
 - **Serviço externo**: consulta de obras e referências bibliográficas na Open Library API com tratamento completo dos 4 estados (carregamento, sucesso, ausência de dados e erro).
+- **Estado global**: gerenciamento transversal de preferências (tema claro/escuro, visibilidade de referências e aluno ativo da sessão) via `PreferenciasContext`.
+- **Recursos nativos**: compartilhamento pelo menu nativo do sistema operacional (`Share.share`), feedback háptico (`Vibration.vibrate`), solicitação e checagem de permissões (`PermissionsAndroid`) e gravação local de comprovantes digitais.
 
 ## Tecnologias utilizadas
 
@@ -155,9 +165,9 @@ cp db.original.json db.json
 ## Limitações conhecidas
 
 - **Sincronização unidirecional:** quando o app reconecta ao servidor, os dados do backend sobrescrevem os locais. Dados criados offline que não foram enviados ao servidor podem ser perdidos ao sincronizar.
-- **Sem autenticação nem controle de permissões.** O app assume um usuário administrador já autenticado; o perfil cadastrado em Pessoas é apenas um atributo do registro, não restringe acesso.
-- **Certificado sem arquivo.** A emissão registra o estado da matrícula e exibe o certificado na tela, mas ainda não gera PDF nem oferece compartilhamento.
-- **Build nativo não gerado.** A execução foi verificada via Expo Go; não há APK nem IPA publicados.
+- **Sem autenticação nem controle de controle de papéis (RBAC):** O app assume um usuário administrador já autenticado; o perfil cadastrado em Pessoas é apenas um atributo do registro, não restringe acesso a telas.
+- **Formato do certificado:** O compartilhamento e a exportação local utilizam texto formatado e comprovante digital JSON com hash SHA-256; a renderização vetorial de PDF requer backend ou biblioteca nativa adicional de renderização de PDF.
+- **Build nativo não gerado:** A execução foi verificada via Expo Go; não há APK nem IPA publicados.
 - **Ícones textuais** nas abas, em vez de uma biblioteca de ícones, para manter o projeto sem dependências visuais extras.
 
 ## Documentação
@@ -167,6 +177,7 @@ cp db.original.json db.json
 - [`docs/etapa-04.md`](docs/etapa-04.md) — persistência local, justificativa técnica, estrutura dos dados, operações CRUD, telas integradas e testes
 - [`docs/etapa-05.md`](docs/etapa-05.md) — integração com backend, fluxo de negócio, modo online/offline, decisões técnicas e testes
 - [`docs/etapa-06.md`](docs/etapa-06.md) — integração com serviço externo (Open Library API), endpoints, 4 estados de UI e testes
+- [`docs/etapa-07.md`](docs/etapa-07.md) — gerenciamento de estado global (PreferenciasContext), tema claro/escuro, recursos nativos (Share API, Permissions, Vibration) e testes
 - [Documentação do Expo](https://docs.expo.dev/) · [React Navigation](https://reactnavigation.org/docs/getting-started)
 
 ## Autor

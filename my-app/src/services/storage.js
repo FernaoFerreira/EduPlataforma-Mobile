@@ -32,6 +32,8 @@ export const CHAVES_STORAGE = {
   ASSINATURAS: '@eduplataforma:assinaturas',
   PAGAMENTOS: '@eduplataforma:pagamentos',
   INICIALIZADO: '@eduplataforma:inicializado',
+  PREFERENCIAS: '@eduplataforma:preferencias',
+  DOCUMENTOS_SALVOS: '@eduplataforma:documentos_salvos',
 };
 
 // Fallback de memória para ambientes sem driver nativo/browser (ex.: testes unitários puros em Node)
@@ -226,6 +228,53 @@ export async function restaurarDadosIniciais() {
 export async function limparArmazenamento() {
   const chaves = Object.values(CHAVES_STORAGE);
   await Promise.all(chaves.map((k) => removerItem(k)));
+}
+
+/**
+ * Valores padrão das preferências globais do aplicativo.
+ */
+export const PREFERENCIAS_PADRAO = {
+  tema: 'claro',
+  exibirBibliografia: true,
+  alunoAtivoId: null,
+  notificacoesHabilitadas: true,
+};
+
+/**
+ * Carrega as preferências globais salvas no dispositivo.
+ */
+export async function carregarPreferencias() {
+  const salvas = await obterItem(CHAVES_STORAGE.PREFERENCIAS);
+  if (!salvas) return { ...PREFERENCIAS_PADRAO };
+  return { ...PREFERENCIAS_PADRAO, ...salvas };
+}
+
+/**
+ * Salva as preferências globais no dispositivo.
+ */
+export async function salvarPreferencias(novasPreferencias) {
+  const atuais = await carregarPreferencias();
+  const mescladas = { ...atuais, ...novasPreferencias };
+  await salvarItem(CHAVES_STORAGE.PREFERENCIAS, mescladas);
+  return mescladas;
+}
+
+/**
+ * Salva um documento gerado (ex.: comprovante de certificado exportado) no dispositivo.
+ */
+export async function salvarDocumentoLocal(documento) {
+  const existentes = (await obterItem(CHAVES_STORAGE.DOCUMENTOS_SALVOS)) || [];
+  const atualizados = [documento, ...existentes];
+  await salvarItem(CHAVES_STORAGE.DOCUMENTOS_SALVOS, atualizados);
+  return documento;
+}
+
+/**
+ * Lista todos os documentos locais salvos no dispositivo.
+ */
+export async function listarDocumentosLocais() {
+  const lista = await obterItem(CHAVES_STORAGE.DOCUMENTOS_SALVOS);
+  return Array.isArray(lista) ? lista : [];
 }
 
 /**

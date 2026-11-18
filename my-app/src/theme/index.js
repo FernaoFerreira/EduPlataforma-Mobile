@@ -6,7 +6,7 @@
  * texto grande e para bordas de componentes interativos).
  */
 
-export const cores = {
+export const coresClaro = {
   // Base
   tinta: '#16243F',           // texto principal — 13.6:1 sobre papel
   textoSecundario: '#4C5B73', // 6.9:1 sobre papel
@@ -34,6 +34,45 @@ export const cores = {
   desabilitado: '#9AA6BC',
   sobreposicao: 'rgba(22, 36, 63, 0.45)',
 };
+
+export const coresEscuro = {
+  // Base
+  tinta: '#F1F5F9',           // texto principal claro em fundo escuro (WCAG AA)
+  textoSecundario: '#94A3B8', // texto secundário suavizado
+  papel: '#1E293B',           // superfície de cartões e modais
+  fundo: '#0F172A',           // fundo geral escuro
+  borda: '#334155',           // divisores e contornos
+  bordaForte: '#475569',
+
+  // Marca
+  primaria: '#60A5FA',       // tom azul claro para destaque em fundo escuro
+  primariaEscura: '#3B82F6',
+  primariaClara: '#1E3A8A',  // realce escuro
+  acento: '#F59E0B',         // dourado de destaque
+  acentoClaro: '#78350F',
+
+  // Semânticas
+  sucesso: '#4ADE80',
+  sucessoClaro: '#14532D',
+  erro: '#F87171',
+  erroClaro: '#7F1D1D',
+  aviso: '#FBBF24',
+  avisoClaro: '#78350F',
+
+  // Estados
+  desabilitado: '#64748B',
+  sobreposicao: 'rgba(0, 0, 0, 0.70)',
+};
+
+// Mantém compatibilidade regressiva com todo o código existente
+export const cores = coresClaro;
+
+/**
+ * Retorna o mapa de cores de acordo com o tema selecionado.
+ */
+export function obterCores(tema = 'claro') {
+  return tema === 'escuro' ? coresEscuro : coresClaro;
+}
 
 export const espaco = {
   xs: 4,

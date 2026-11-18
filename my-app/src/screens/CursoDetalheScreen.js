@@ -5,7 +5,10 @@ import { Cartao, Etiqueta, TituloSecao, EstadoVazio } from '../components/Cartao
 import Botao from '../components/Botao';
 import CampoTexto from '../components/CampoTexto';
 import { useDados } from '../context/DadosContext';
+import { useFeedback } from '../context/FeedbackContext';
+import { usePreferencias } from '../context/PreferenciasContext';
 import { buscarLivrosPorTermo } from '../services/livrosApi';
+import { compartilharCurso } from '../services/dispositivo';
 import { cores, espaco, tipografia, raio } from '../theme';
 
 const moeda = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -13,6 +16,8 @@ const moeda = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'B
 export default function CursoDetalheScreen({ navigation, route }) {
   const { cursoId } = route.params;
   const dados = useDados();
+  const { mostrar } = useFeedback();
+  const { exibirBibliografia, alternarBibliografia } = usePreferencias();
   const curso = dados.cursoPorId(cursoId);
 
   // Estados da integração externa com a Open Library
@@ -21,6 +26,7 @@ export default function CursoDetalheScreen({ navigation, route }) {
   const [livros, setLivros] = useState([]);
   const [totalLivros, setTotalLivros] = useState(0);
   const [erroLivros, setErroLivros] = useState(null);
+  const [compartilhando, setCompartilhando] = useState(false);
 
   // Define o termo de busca inicial com base no título do curso
   useEffect(() => {
@@ -58,12 +64,12 @@ export default function CursoDetalheScreen({ navigation, route }) {
     }
   }, [termoBusca]);
 
-  // Carrega automaticamente os livros quando a tela abre com o curso definido
+  // Carrega automaticamente os livros quando a tela abre com o curso definido e a preferência global permite
   useEffect(() => {
-    if (curso && termoBusca && statusLivros === 'ocioso') {
+    if (curso && termoBusca && statusLivros === 'ocioso' && exibirBibliografia) {
       carregarLivros(termoBusca);
     }
-  }, [curso, termoBusca, statusLivros, carregarLivros]);
+  }, [curso, termoBusca, statusLivros, carregarLivros, exibirBibliografia]);
 
   // O curso pode ter sido excluído em outra tela enquanto esta estava na pilha.
   if (!curso) {
@@ -85,6 +91,25 @@ export default function CursoDetalheScreen({ navigation, route }) {
   const matriculas = dados.matriculasDoCurso(curso.id);
   const totalAulas = modulos.reduce((soma, m) => soma + dados.aulasDoModulo(m.id).length, 0);
   const concluidas = matriculas.filter((m) => m.concluida).length;
+
+  const handleCompartilhar = async () => {
+    setCompartilhando(true);
+    mostrar('Preparando compartilhamento do curso...', 'info');
+    try {
+      const resultado = await compartilharCurso({ curso, professor, categoria });
+      if (resultado.sucesso) {
+        mostrar(resultado.mensagem, 'sucesso');
+      } else if (resultado.acao === 'cancelado') {
+        mostrar('Compartilhamento cancelado.', 'info');
+      } else {
+        mostrar(resultado.mensagem || 'Não foi possível compartilhar.', 'erro');
+      }
+    } catch (erro) {
+      mostrar(`Erro ao compartilhar: ${erro.message}`, 'erro');
+    } finally {
+      setCompartilhando(false);
+    }
+  };
 
   return (
     <Tela>
@@ -144,121 +169,143 @@ export default function CursoDetalheScreen({ navigation, route }) {
         apoio="Obras e literatura complementar consultadas via Open Library API."
       />
 
-      <View style={estilos.buscaContainer}>
-        <CampoTexto
-          rotulo="Pesquisar referências por tema"
-          valor={termoBusca}
-          onChangeText={setTermoBusca}
-          placeholder="Ex.: React Native, SQL, Design de Interface..."
-          ajuda="Consulte livros do acervo mundial relacionados ao curso."
-          returnKeyType="search"
-          onSubmitEditing={() => carregarLivros(termoBusca)}
-        />
-        <View style={estilos.botoesBusca}>
-          <Botao
-            titulo="Buscar referências"
-            onPress={() => carregarLivros(termoBusca)}
-            dica="Consulta livros na Open Library usando o termo digitado"
-          />
-        </View>
-      </View>
-
-      {/* ESTADO 1: CARREGANDO */}
-      {statusLivros === 'carregando' && (
-        <View
-          style={estilos.estadoContainer}
-          accessibilityRole="progressbar"
-          accessibilityLabel="Consultando acervo da Open Library"
-        >
-          <ActivityIndicator size="small" color={cores.primaria} />
-          <Text style={estilos.estadoTexto}>
-            Consultando acervo da Open Library para "{termoBusca}"...
-          </Text>
-        </View>
-      )}
-
-      {/* ESTADO 2: ERRO */}
-      {statusLivros === 'erro' && (
-        <Cartao faixa={cores.erro} estilo={estilos.cartaoErro}>
-          <View style={estilos.erroTopo}>
-            <Etiqueta texto="Falha de conexão externa" tom="erro" />
+      {!exibirBibliografia ? (
+        <Cartao faixa={cores.aviso} estilo={{ marginBottom: espaco.md }}>
+          <View style={{ marginBottom: espaco.xs }}>
+            <Etiqueta texto="Consulta Oculta por Preferência" tom="aviso" />
           </View>
-          <Text style={[tipografia.corpo, estilos.erroTexto]}>
-            {erroLivros}
+          <Text style={[tipografia.corpo, { marginBottom: espaco.sm }]}>
+            A exibição de referências bibliográficas da Open Library está desativada nas preferências globais do aplicativo.
           </Text>
           <Botao
-            titulo="Tentar novamente"
-            variante="secundaria"
-            onPress={() => carregarLivros(termoBusca)}
-            dica="Tenta consultar novamente a Open Library"
-          />
-        </Cartao>
-      )}
-
-      {/* ESTADO 3: AUSÊNCIA DE DADOS (VAZIO) */}
-      {statusLivros === 'vazio' && (
-        <EstadoVazio
-          titulo="Nenhuma obra encontrada"
-          descricao={`A Open Library não retornou obras para o termo "${termoBusca}". Tente pesquisar por palavras-chave mais gerais.`}
-        >
-          <Botao
-            titulo={`Buscar por "${categoria?.nome || 'Educação'}"`}
+            titulo="Ativar busca de referências"
             variante="secundaria"
             onPress={() => {
-              const termoCat = categoria?.nome || 'Educação';
-              setTermoBusca(termoCat);
-              carregarLivros(termoCat);
+              alternarBibliografia();
+              mostrar('Exibição de referências ativada nas preferências.', 'sucesso');
             }}
-            dica="Busca referências usando o nome da categoria"
+            dica="Habilita a exibição de livros da Open Library nas preferências globais"
           />
-        </EstadoVazio>
-      )}
+        </Cartao>
+      ) : (
+        <>
+          <View style={estilos.buscaContainer}>
+            <CampoTexto
+              rotulo="Pesquisar referências por tema"
+              valor={termoBusca}
+              onChangeText={setTermoBusca}
+              placeholder="Ex.: React Native, SQL, Design de Interface..."
+              ajuda="Consulte livros do acervo mundial relacionados ao curso."
+              returnKeyType="search"
+              onSubmitEditing={() => carregarLivros(termoBusca)}
+            />
+            <View style={estilos.botoesBusca}>
+              <Botao
+                titulo="Buscar referências"
+                onPress={() => carregarLivros(termoBusca)}
+                dica="Consulta livros na Open Library usando o termo digitado"
+              />
+            </View>
+          </View>
 
-      {/* ESTADO 4: SUCESSO COM DADOS */}
-      {statusLivros === 'sucesso' && (
-        <View style={estilos.listaLivros}>
-          <Text style={estilos.totalResultados} accessibilityLiveRegion="polite">
-            {totalLivros > livros.length
-              ? `Exibindo ${livros.length} principais de ${totalLivros} referências encontradas:`
-              : `${livros.length} ${livros.length === 1 ? 'referência encontrada' : 'referências encontradas'}:`}
-          </Text>
-
-          {livros.map((livro) => (
-            <Cartao
-              key={livro.id}
-              estilo={estilos.livroItem}
-              faixa={cores.primaria}
-              onPress={
-                livro.linkUrl
-                  ? () => Linking.openURL(livro.linkUrl).catch(() => {})
-                  : undefined
-              }
-              rotuloAcessivel={`Livro ${livro.titulo}, autores ${livro.autoresTexto}`}
-              dica={livro.linkUrl ? 'Abre o registro do livro no site da Open Library' : undefined}
+          {/* ESTADO 1: CARREGANDO */}
+          {statusLivros === 'carregando' && (
+            <View
+              style={estilos.estadoContainer}
+              accessibilityRole="progressbar"
+              accessibilityLabel="Consultando acervo da Open Library"
             >
-              <Text style={tipografia.corpoForte}>{livro.titulo}</Text>
-              <Text style={tipografia.apoio}>
-                {livro.autoresTexto}
-                {livro.anoPublicacao ? ` · 1ª pub. ${livro.anoPublicacao}` : ''}
+              <ActivityIndicator size="small" color={cores.primaria} />
+              <Text style={estilos.estadoTexto}>
+                Consultando acervo da Open Library para "{termoBusca}"...
+              </Text>
+            </View>
+          )}
+
+          {/* ESTADO 2: ERRO */}
+          {statusLivros === 'erro' && (
+            <Cartao faixa={cores.erro} estilo={estilos.cartaoErro}>
+              <View style={estilos.erroTopo}>
+                <Etiqueta texto="Falha de conexão externa" tom="erro" />
+              </View>
+              <Text style={[tipografia.corpo, estilos.erroTexto]}>
+                {erroLivros}
+              </Text>
+              <Botao
+                titulo="Tentar novamente"
+                variante="secundaria"
+                onPress={() => carregarLivros(termoBusca)}
+                dica="Tenta consultar novamente a Open Library"
+              />
+            </Cartao>
+          )}
+
+          {/* ESTADO 3: AUSÊNCIA DE DADOS (VAZIO) */}
+          {statusLivros === 'vazio' && (
+            <EstadoVazio
+              titulo="Nenhuma obra encontrada"
+              descricao={`A Open Library não retornou obras para o termo "${termoBusca}". Tente pesquisar por palavras-chave mais gerais.`}
+            >
+              <Botao
+                titulo={`Buscar por "${categoria?.nome || 'Educação'}"`}
+                variante="secundaria"
+                onPress={() => {
+                  const termoCat = categoria?.nome || 'Educação';
+                  setTermoBusca(termoCat);
+                  carregarLivros(termoCat);
+                }}
+                dica="Busca referências usando o nome da categoria"
+              />
+            </EstadoVazio>
+          )}
+
+          {/* ESTADO 4: SUCESSO COM DADOS */}
+          {statusLivros === 'sucesso' && (
+            <View style={estilos.listaLivros}>
+              <Text style={estilos.totalResultados} accessibilityLiveRegion="polite">
+                {totalLivros > livros.length
+                  ? `Exibindo ${livros.length} principais de ${totalLivros} referências encontradas:`
+                  : `${livros.length} ${livros.length === 1 ? 'referência encontrada' : 'referências encontradas'}:`}
               </Text>
 
-              <View style={estilos.livroRodape}>
-                <Etiqueta
-                  texto={`${livro.edicoes} ${livro.edicoes === 1 ? 'edição' : 'edições'}`}
-                  tom="neutro"
-                />
-                {!!livro.isbn && (
-                  <Text style={tipografia.micro}>ISBN: {livro.isbn}</Text>
-                )}
-                {!!livro.linkUrl && (
-                  <Text style={estilos.linkExterno}>
-                    Ver na Open Library ↗
+              {livros.map((livro) => (
+                <Cartao
+                  key={livro.id}
+                  estilo={estilos.livroItem}
+                  faixa={cores.primaria}
+                  onPress={
+                    livro.linkUrl
+                      ? () => Linking.openURL(livro.linkUrl).catch(() => {})
+                      : undefined
+                  }
+                  rotuloAcessivel={`Livro ${livro.titulo}, autores ${livro.autoresTexto}`}
+                  dica={livro.linkUrl ? 'Abre o registro do livro no site da Open Library' : undefined}
+                >
+                  <Text style={tipografia.corpoForte}>{livro.titulo}</Text>
+                  <Text style={tipografia.apoio}>
+                    {livro.autoresTexto}
+                    {livro.anoPublicacao ? ` · 1ª pub. ${livro.anoPublicacao}` : ''}
                   </Text>
-                )}
-              </View>
-            </Cartao>
-          ))}
-        </View>
+
+                  <View style={estilos.livroRodape}>
+                    <Etiqueta
+                      texto={`${livro.edicoes} ${livro.edicoes === 1 ? 'edição' : 'edições'}`}
+                      tom="neutro"
+                    />
+                    {!!livro.isbn && (
+                      <Text style={tipografia.micro}>ISBN: {livro.isbn}</Text>
+                    )}
+                    {!!livro.linkUrl && (
+                      <Text style={estilos.linkExterno}>
+                        Ver na Open Library ↗
+                      </Text>
+                    )}
+                  </View>
+                </Cartao>
+              ))}
+            </View>
+          )}
+        </>
       )}
 
       <TituloSecao texto="Matrículas" apoio={`${concluidas} de ${matriculas.length} concluíram o curso.`} />
@@ -281,8 +328,18 @@ export default function CursoDetalheScreen({ navigation, route }) {
 
       <View style={estilos.acoes}>
         <Botao
+          titulo={compartilhando ? 'Compartilhando...' : 'Compartilhar curso'}
+          onPress={handleCompartilhar}
+          desabilitado={compartilhando}
+          dica="Abre o compartilhador nativo do aparelho com os dados deste curso"
+        />
+        <Botao
           titulo="Editar curso"
+          variante="secundaria"
           onPress={() => navigation.navigate('CursoForm', { cursoId: curso.id })}
+          dica="Abre o formulário de edição deste curso"
+        />
+      </View>
           dica="Abre o formulário de edição deste curso"
         />
       </View>

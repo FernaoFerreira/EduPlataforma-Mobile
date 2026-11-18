@@ -1,11 +1,18 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Alert } from 'react-native';
 import Tela, { Grade } from '../components/Tela';
 import { Trilha, CartaoMetrica } from '../components/Trilha';
 import { Cartao, Etiqueta, TituloSecao } from '../components/Cartao';
 import Botao from '../components/Botao';
+import CampoSelecao from '../components/CampoSelecao';
 import { useDados } from '../context/DadosContext';
 import { useFeedback } from '../context/FeedbackContext';
+import { usePreferencias } from '../context/PreferenciasContext';
+import {
+  vibrarDispositivo,
+  listarCertificadosExportados,
+  solicitarPermissao,
+} from '../services/dispositivo';
 import { cores, espaco, tipografia } from '../theme';
 
 const moeda = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -13,12 +20,35 @@ const moeda = (v) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'B
 export default function PainelScreen({ navigation }) {
   const dados = useDados();
   const { mostrar } = useFeedback();
+  const {
+    tema,
+    alternarTema,
+    exibirBibliografia,
+    alternarBibliografia,
+    alunoAtivoId,
+    definirAlunoAtivo,
+    notificacoesHabilitadas,
+    alternarNotificacoes,
+    coresTema,
+  } = usePreferencias();
+
+  const [documentosSalvos, setDocumentosSalvos] = useState([]);
+
+  useEffect(() => {
+    listarCertificadosExportados().then(setDocumentosSalvos).catch(() => {});
+  }, []);
 
   const concluidas = dados.matriculas.filter((m) => m.concluida).length;
   const certificadosPendentes = dados.matriculas.filter(
     (m) => m.concluida && !m.certificadoEmitido
   ).length;
   const cursosPublicados = dados.cursos.filter((c) => c.publicado).length;
+
+  const alunoAtivo = dados.usuarios.find((u) => u.id === alunoAtivoId);
+  const opcoesAlunos = [
+    { valor: '', texto: 'Nenhum aluno ativo' },
+    ...dados.alunos().map((a) => ({ valor: a.id, texto: `${a.nome} (${a.email})` })),
+  ];
 
   const irPara = (aba, tela) =>
     navigation.navigate(aba, tela ? { screen: tela } : undefined);
@@ -27,9 +57,28 @@ export default function PainelScreen({ navigation }) {
     mostrar('Sincronizando com o servidor...', 'info');
     const resultado = await dados.sincronizarComBackend();
     if (resultado.sucesso) {
+      vibrarDispositivo(100);
       mostrar('Dados sincronizados com o servidor.', 'sucesso');
     } else {
       mostrar('Falha ao sincronizar. Usando dados locais.', 'erro');
+    }
+  };
+
+  const testarVibracao = () => {
+    vibrarDispositivo(200);
+    mostrar('Feedback háptico (vibração) emitido com sucesso!', 'sucesso');
+  };
+
+  const testarPermissaoArmazenamento = async () => {
+    mostrar('Verificando permissões nativas...', 'info');
+    const resultado = await solicitarPermissao('armazenamento', {
+      titulo: 'Permissão de Teste',
+      mensagem: 'Esta verificação confirma se o app pode exportar arquivos para a memória do dispositivo.',
+    });
+    if (resultado.concedida) {
+      mostrar(resultado.mensagem, 'sucesso');
+    } else {
+      mostrar(resultado.mensagem, 'erro');
     }
   };
 
@@ -189,6 +238,122 @@ export default function PainelScreen({ navigation }) {
           }}
           dica="Redefine o armazenamento para os dados iniciais"
         />
+      </Cartao>
+
+      {/* SEÇÃO DA ETAPA 07: GERENCIAMENTO DE ESTADO GLOBAL */}
+      <TituloSecao
+        texto="Preferências globais (Estado compartilhado)"
+        apoio="Configurações salvas no dispositivo que afetam todas as telas do app."
+      />
+
+      <Cartao faixa={cores.primaria}>
+        <View style={estilos.persistenciaTopo}>
+          <View style={{ flex: 1, paddingRight: espaco.sm }}>
+            <Text style={tipografia.corpoForte}>Tema visual da plataforma</Text>
+            <Text style={tipografia.apoio}>
+              Alterna entre Modo Claro e Modo Escuro em todos os componentes e telas.
+            </Text>
+          </View>
+          <Etiqueta
+            texto={tema === 'escuro' ? 'Modo Escuro' : 'Modo Claro'}
+            tom={tema === 'escuro' ? 'aviso' : 'info'}
+          />
+        </View>
+        <Botao
+          titulo={tema === 'escuro' ? 'Mudar para Tema Claro' : 'Mudar para Tema Escuro'}
+          variante="secundaria"
+          onPress={() => {
+            alternarTema();
+            mostrar(`Tema alterado para ${tema === 'escuro' ? 'Claro' : 'Escuro'}.`, 'info');
+          }}
+          dica="Alterna as cores de toda a aplicação"
+        />
+      </Cartao>
+
+      <Cartao faixa={cores.primaria} estilo={{ marginTop: espaco.md }}>
+        <View style={estilos.persistenciaTopo}>
+          <View style={{ flex: 1, paddingRight: espaco.sm }}>
+            <Text style={tipografia.corpoForte}>Consulta de bibliografia externa</Text>
+            <Text style={tipografia.apoio}>
+              Controla se a seção de busca na Open Library é exibida na tela de detalhes dos cursos.
+            </Text>
+          </View>
+          <Etiqueta
+            texto={exibirBibliografia ? 'Ativada' : 'Oculta'}
+            tom={exibirBibliografia ? 'sucesso' : 'neutro'}
+          />
+        </View>
+        <Botao
+          titulo={exibirBibliografia ? 'Ocultar referências nos cursos' : 'Exibir referências nos cursos'}
+          variante="secundaria"
+          onPress={() => {
+            alternarBibliografia();
+            mostrar(`Referências externas ${exibirBibliografia ? 'ocultas' : 'ativadas'}.`, 'info');
+          }}
+          dica="Ligue ou desligue a consulta à Open Library"
+        />
+      </Cartao>
+
+      <Cartao faixa={cores.acento} estilo={{ marginTop: espaco.md }}>
+        <View style={estilos.persistenciaTopo}>
+          <View style={{ flex: 1, paddingRight: espaco.sm }}>
+            <Text style={tipografia.corpoForte}>Aluno ativo na sessão</Text>
+            <Text style={tipografia.apoio}>
+              Identifica qual aluno está navegando para destacar suas matrículas e certificados.
+            </Text>
+          </View>
+          <Etiqueta
+            texto={alunoAtivo ? alunoAtivo.nome : 'Nenhum'}
+            tom={alunoAtivo ? 'sucesso' : 'neutro'}
+          />
+        </View>
+        <CampoSelecao
+          rotulo="Selecionar aluno da sessão"
+          opcoes={opcoesAlunos}
+          valorSelecionado={alunoAtivoId || ''}
+          onSelecionar={(novoId) => {
+            definirAlunoAtivo(novoId);
+            const selecionado = dados.usuarios.find((u) => u.id === novoId);
+            mostrar(selecionado ? `Aluno ativo: ${selecionado.nome}` : 'Nenhum aluno ativo.', 'info');
+          }}
+        />
+      </Cartao>
+
+      {/* SEÇÃO DA ETAPA 07: RECURSOS NATIVOS DO DISPOSITIVO */}
+      <TituloSecao
+        texto="Recursos nativos do dispositivo"
+        apoio="Integração com Share API, sistema de arquivos, permissões e vibração tátil."
+      />
+
+      <Cartao faixa={cores.sucesso}>
+        <View style={estilos.persistenciaTopo}>
+          <View style={{ flex: 1, paddingRight: espaco.sm }}>
+            <Text style={tipografia.corpoForte}>Compartilhamento e feedback tátil</Text>
+            <Text style={tipografia.apoio}>
+              O app utiliza o menu nativo do SO para compartilhar cursos e certificados, além de feedback háptico ao confirmar ações.
+            </Text>
+          </View>
+          <Etiqueta texto="Nativo" tom="sucesso" />
+        </View>
+
+        <Text style={[tipografia.apoio, { marginBottom: espaco.md }]}>
+          Certificados exportados no aparelho: {documentosSalvos.length} arquivo(s) registrado(s).
+        </Text>
+
+        <View style={{ gap: espaco.sm }}>
+          <Botao
+            titulo="Testar feedback tátil (Vibração)"
+            variante="secundaria"
+            onPress={testarVibracao}
+            dica="Aciona o motor de vibração nativo do aparelho"
+          />
+          <Botao
+            titulo="Verificar permissão de armazenamento"
+            variante="secundaria"
+            onPress={testarPermissaoArmazenamento}
+            dica="Solicita e testa a autorização de gravação de arquivos"
+          />
+        </View>
       </Cartao>
     </Tela>
   );

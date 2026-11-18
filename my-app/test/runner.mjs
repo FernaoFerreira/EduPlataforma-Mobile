@@ -11,6 +11,7 @@ run({
     path.join(__dirname, 'crud-context.test.mjs'),
     path.join(__dirname, 'api.test.mjs'),
     path.join(__dirname, 'livrosApi.test.mjs'),
+    path.join(__dirname, 'dispositivo-preferencias.test.mjs'),
   ],
 })
   .compose(new spec())
