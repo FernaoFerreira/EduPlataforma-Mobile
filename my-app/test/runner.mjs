@@ -9,6 +9,7 @@ run({
   files: [
     path.join(__dirname, 'persistencia.test.mjs'),
     path.join(__dirname, 'crud-context.test.mjs'),
+    path.join(__dirname, 'api.test.mjs'),
   ],
 })
   .compose(new spec())

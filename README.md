@@ -25,7 +25,30 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 | Planos, assinaturas e registro de pagamentos | implementado |
 | Busca e filtros nas listagens | implementado |
 | Persistência local de dados no dispositivo (AsyncStorage) | implementado (Etapa 4) |
-| Integração remota com backend | pendente (ver limitações) |
+| Integração com backend JSON Server | implementado (Etapa 5) |
+| Modo online/offline com escrita dual | implementado (Etapa 5) |
+| Sincronização manual com servidor | implementado (Etapa 5) |
+
+## Arquitetura
+
+```
+┌──────────────────────────────────────────────────────┐
+│                   React Native / Expo                │
+│  ┌────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │  Screens   │→ │ DadosContext │→ │  api.js      │─┼──→ JSON Server
+│  │  (13 telas)│  │  (estado +   │  │  (fetch HTTP)│ │    (porta 3000)
+│  └────────────┘  │  CRUD)       │  └──────────────┘ │
+│                  │              │→ ┌──────────────┐  │
+│                  │              │  │ storage.js   │  │
+│                  └──────────────┘  │ (AsyncStorage)│ │
+│                                    └──────────────┘  │
+└──────────────────────────────────────────────────────┘
+```
+
+**Fluxo de dados:**
+- **Leitura**: tenta backend → fallback AsyncStorage → seed (seed.js).
+- **Escrita**: atualiza estado React imediatamente + persiste no AsyncStorage + envia ao backend (fire-and-forget).
+- **Offline**: funciona normalmente com dados locais; operações são armazenadas localmente.
 
 ## Tecnologias utilizadas
 
@@ -37,6 +60,10 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 - Node.js Test Runner nativo (`node:test`) para testes automatizados
 - JavaScript (sem bibliotecas de UI de terceiros: todos os componentes são próprios)
 
+**Backend:**
+- JSON Server 0.17.3 — API REST completa a partir de arquivo `db.json`
+- 9 endpoints: categorias, usuarios, cursos, modulos, aulas, matriculas, planos, assinaturas, pagamentos
+
 **Projeto web de origem, como referência:**
 - React + Vite, React Router, Axios, JSON Server
 
@@ -45,13 +72,16 @@ Quem administra uma plataforma EAD depende de um painel web no computador para t
 ```
 my-app/
 ├── App.js                      Ponto de entrada; monta os provedores e a navegação
+├── db.json                     Base de dados do JSON Server (9 coleções)
+├── db.original.json            Cópia de segurança do banco inicial
 ├── src/
 │   ├── theme/index.js          Tokens de cor, espaço, tipografia e alvo de toque
 │   ├── data/seed.js            Dados iniciais em memória / semente de demonstração
 │   ├── services/
+│   │   ├── api.js              Cliente HTTP REST para o JSON Server
 │   │   └── storage.js          Serviço de persistência local com AsyncStorage
 │   ├── context/
-│   │   ├── DadosContext.js     Estado, operações CRUD e sincronização com armazenamento
+│   │   ├── DadosContext.js     Estado, operações CRUD, integração backend + local
 │   │   └── FeedbackContext.js  Avisos de confirmação e erro
 │   ├── components/             13 componentes reutilizáveis
 │   ├── navigation/index.js     Abas + pilhas
@@ -59,14 +89,16 @@ my-app/
 ├── test/
 │   ├── runner.mjs              Executor dos testes automatizados
 │   ├── persistencia.test.mjs   Testes do serviço de armazenamento e ciclo de vida
-│   └── crud-context.test.mjs   Testes das operações de domínio e integridade
+│   ├── crud-context.test.mjs   Testes das operações de domínio e integridade
+│   └── api.test.mjs            Testes do serviço de API e integridade do db.json
 docs/
 ├── etapa-02.md                 Protótipo de interface
 ├── etapa-03.md                 Navegação, UX e acessibilidade
-└── etapa-04.md                 Persistência local de dados
+├── etapa-04.md                 Persistência local de dados
+└── etapa-05.md                 Primeira versão funcional com backend
 ```
 
-A separação segue uma regra simples: `components/` não conhece as regras do domínio e recebe tudo por props; `screens/` compõe componentes e conversa com os contextos; `context/` concentra dados e feedback; `services/` isola o acesso a I/O e persistência no dispositivo; `theme/` centraliza os tokens — nenhuma cor ou medida é escrita direto nas telas.
+A separação segue uma regra simples: `components/` não conhece as regras do domínio e recebe tudo por props; `screens/` compõe componentes e conversa com os contextos; `context/` concentra dados e feedback; `services/` isola o acesso a I/O (API HTTP e persistência local); `theme/` centraliza os tokens — nenhuma cor ou medida é escrita direto nas telas.
 
 ## Execução
 
@@ -76,6 +108,17 @@ Pré-requisitos: Node.js 18 ou superior e o app **Expo Go** no celular, ou um em
 git clone https://github.com/FernaoFerreira/EduPlataforma-Mobile.git
 cd EduPlataforma-Mobile/my-app
 npm install
+```
+
+### Iniciar o backend
+
+```bash
+npx json-server --watch db.json --port 3000
+```
+
+### Iniciar o frontend (em outro terminal)
+
+```bash
 npx expo start
 ```
 
@@ -83,16 +126,22 @@ Com o servidor no ar, escaneie o QR code com o Expo Go, ou pressione `a` (Androi
 
 ### Testes automatizados
 
-Para executar os testes automatizados de persistência e integridade relacional:
+Para executar os 26 testes automatizados (persistência, domínio e API):
 
 ```bash
 cd my-app
 node test/runner.mjs
 ```
 
+### Restaurar base de dados
+
+```bash
+cp db.original.json db.json
+```
+
 ## Limitações conhecidas
 
-- **Persistência local ativa (Etapa 4):** os dados agora são armazenados no dispositivo utilizando AsyncStorage. Todas as operações de criação, edição, exclusão em cascata e regras de negócio persistem entre execuções do aplicativo. A sincronização com backend remoto (JSON Server) será abordada em etapa posterior.
+- **Sincronização unidirecional:** quando o app reconecta ao servidor, os dados do backend sobrescrevem os locais. Dados criados offline que não foram enviados ao servidor podem ser perdidos ao sincronizar.
 - **Sem autenticação nem controle de permissões.** O app assume um usuário administrador já autenticado; o perfil cadastrado em Pessoas é apenas um atributo do registro, não restringe acesso.
 - **Certificado sem arquivo.** A emissão registra o estado da matrícula e exibe o certificado na tela, mas ainda não gera PDF nem oferece compartilhamento.
 - **Build nativo não gerado.** A execução foi verificada via Expo Go; não há APK nem IPA publicados.
@@ -103,6 +152,7 @@ node test/runner.mjs
 - [`docs/etapa-02.md`](docs/etapa-02.md) — telas, componentes reutilizáveis, entrada de dados, adaptação a tamanhos de tela e decisões de interface
 - [`docs/etapa-03.md`](docs/etapa-03.md) — estrutura de navegação, feedback visual, Lei de Fitts, acessibilidade e roteiros de teste
 - [`docs/etapa-04.md`](docs/etapa-04.md) — persistência local, justificativa técnica, estrutura dos dados, operações CRUD, telas integradas e testes
+- [`docs/etapa-05.md`](docs/etapa-05.md) — integração com backend, fluxo de negócio, modo online/offline, decisões técnicas e testes
 - [Documentação do Expo](https://docs.expo.dev/) · [React Navigation](https://reactnavigation.org/docs/getting-started)
 
 ## Autor

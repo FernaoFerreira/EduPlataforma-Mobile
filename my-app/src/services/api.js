@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 /**
  * Serviço de comunicação com o backend JSON Server — EduPlataforma Mobile.
  *
@@ -11,16 +9,32 @@ import { Platform } from 'react-native';
  * entre dados online ou fallback local (AsyncStorage).
  */
 
+// URL padrão do JSON Server.
 // Em emuladores Android o "localhost" do host é 10.0.2.2.
 // Em iOS ou na web, localhost funciona normalmente.
 // Para dispositivos físicos, substituir pelo IP da máquina na rede local.
-const BASE_URL_PADRAO = Platform.select({
-  android: 'http://10.0.2.2:3000',
-  ios: 'http://localhost:3000',
-  default: 'http://localhost:3000',
-});
+//
+// A detecção da plataforma é feita de forma segura: se o módulo
+// react-native não estiver disponível (ex.: testes em Node.js puro),
+// usa 'http://localhost:3000' como padrão.
+function detectarUrlPadrao() {
+  try {
+    // Tenta acessar Platform via require dinâmico (evita erro em Node.js)
+    const RN = require('react-native');
+    if (RN && RN.Platform) {
+      return RN.Platform.select({
+        android: 'http://10.0.2.2:3000',
+        ios: 'http://localhost:3000',
+        default: 'http://localhost:3000',
+      });
+    }
+  } catch {
+    // Ambiente sem react-native (Node.js, testes, etc.)
+  }
+  return 'http://localhost:3000';
+}
 
-let baseUrl = BASE_URL_PADRAO;
+let baseUrl = detectarUrlPadrao();
 
 /**
  * Permite configurar a URL base da API em tempo de execução
